@@ -12,6 +12,7 @@ function wfind {
 	find . -not -path "*/.terragrunt-cache/*" "$@" 
 }
 
+alias tg='terragrunt'
 alias tgaf="terragrunt apply"   # "fast"
 alias tgpf="terragrunt plan"    # "fast"
 alias tga="terragrunt apply --terragrunt-source-update"
@@ -100,23 +101,15 @@ function terragrunt_local_module_source {
 	fi
 }
 
-function iac-helm-diff-plan {
-	local -r plan="tf.plan"
 
-	terragrunt plan --terragrunt-source-update -no-color >"$plan" &&
-		cat "$plan" | awk '/helm_release/,/^    }/' | awk '/- <<-EOT/,/EOT,/' >old.yaml &&
-		cat "$plan" | awk '/helm_release/,/^    }/' | awk '/+ <<-EOT/,/EOT,/' >new.yaml &&
-		git diff --no-index old.yaml new.yaml
+function iac_helm_diff_plan {
+  local -r plan="tf.plan"
 
-	if [[ ! -s "old.yaml" || ! -s "new.yaml"  ]]; then
-		echo "ERROR: Failed to obtain helm chart diff"
-		cat "$plan"
-		rm old.yaml new.yaml "$plan" 2>/dev/null
-		return 1
-	else
-		echo -e "\n$plan\nold.yaml\nnew.yaml"
-		if ask "Do you want to delete these temporary files?"; then
-			rm -v old.yaml new.yaml "$plan"
-		fi
-	fi
+  terragrunt plan --terragrunt-source-update -no-color > "$plan" && \
+  cat "$plan" | awk '/helm_release/,/^    }/' | awk '/- <<~EOT/,/EOT,/' > old.yaml && \
+  cat "$plan" | awk '/helm_release/,/^    }/' | awk '/\+ <<~EOT/,/EOT,/' > new.yaml && \
+  git --no-pager diff --no-index old.yaml new.yaml
+  
+  echo -e "\n$plan\nold.yaml\nnew.yaml"
+    rm -f old.yaml new.yaml "$plan"
 }

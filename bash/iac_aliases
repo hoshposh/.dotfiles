@@ -8,7 +8,7 @@ function pretty-csv {
 	column -t -s, | less -F -S -X -K
 }
 
-function iac-replace {
+function iac_replace {
 	local -r original="$1"
 	local -r new="$2"
 	local -r auto_approve="${3:-false}"
@@ -29,30 +29,50 @@ function iac-replace {
 }
 
 # Replace all versions with target version
-function iac-replace-all {
+function iac_replace_all {
 	target_version="$1"
 	
 	for v in $(wgrep "\s*source\s*=\s*" | cut -d\? -f2- | sort | uniq | cut -d = -f2- | sed 's|"||'); do 
-		iac-replace "$v" "$target_version"
+		iac_replace "$v" "$target_version"
 	done
 }
 
-function iac-discover-tf-version {
-	local -r base_dir="${1:-.}"
+function iac_discover_tf_version_hcl {
+  local -r hcl_dir="${1:-.}"
+  local -r base_dir="${INFRA_LIVE:-${FOCUSSAAS_INFRA_LIVE:-$2}}"
+  # TODO: discover s3_path from <account>/terragrunt.hcl - terraform_state_s3_bucket (relative from pwd)
+  local -r s3_base_path="${3:-"s3://microfocus-multi-dev-terraform-state"}"
 
-	if [[ ! -d "$base_dir" ]]; then
-		echo "ERROR: Directory does not exist: $base_dir."
-		return 1
-	fi
+  if [[ ! -d "$base_dir" ]]; then
+    echo "ERROR: Directory does not exist: $base_dir."
+    return 1
+  fi
 
-	if [[ -f "$base_dir/terragrunt.hcl" ]]; then
-		iac-discover-tf-version-hcl "$base_dir"
-	else
-		for f in $(find "$base_dir" -name terragrunt.hcl | grep -v '.terragrunt-cache' | sort | uniq); do
-			local dir="$(dirname "$f")"
-			iac-discover-tf-version "$dir"
-		done
-	fi
+  local -r full_path="$(realpath $hcl_dir)"
+  local -r rel_path="$(echo "$full_path" | sed "s|$base_dir/||g")"
+  local -r s3_rel_path="${rel_path#*/}"
+  local -r s3_path="$s3_base_path/$s3_rel_path"
+
+  echo -e "--\n$rel_path"
+  aws s3 cp "$s3_path/terraform.tfstate" - | jq '.terraform_version'
+}
+
+function iac_discover_tf_version {
+  local -r base_dir="${1:-.}"
+
+  if [[ ! -d "$base_dir" ]]; then
+    echo "ERROR: Directory does not exist: $base_dir."
+    return 1
+  fi
+
+  if [[ -f "$base_dir/terragrunt.hcl" ]]; then
+    iac_discover_tf_version_hcl "$base_dir"
+  else
+    for f in $(find "$base_dir" -name terragrunt.hcl | grep -v '.terragrunt-cache' | sort | uniq); do
+      local dir="$(dirname "$f")"
+      iac_discover_tf_version_hcl "$dir"
+    done
+  fi
 }
 
 function iac_cleanup {

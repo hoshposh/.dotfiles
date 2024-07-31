@@ -1,0 +1,12 @@
+#!/usr/bin/env zsh
+#################################################################
+#
+# SSH Aliases
+#
+#################################################################
+
+# SSH keygen & keyscan update for known_hosts
+update_known_hosts ()
+{
+    ssh-keygen -R $1 && ssh-keyscan -H $1 >> ~/.ssh/known_hosts
+}

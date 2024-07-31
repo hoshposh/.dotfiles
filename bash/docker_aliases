@@ -1,0 +1,16 @@
+#!/usr/bin/env zsh
+#################################################################
+#
+# Docker Aliases
+#
+#################################################################
+
+alias drml='docker rm -f $(docker ps -ql)'
+alias di='docker images'
+alias dps='docker ps'
+alias dpsa='docker ps -a'
+alias drm='docker rm -f'
+alias drma='docker rm -f $(docker ps -qa)'
+alias drmil='docker rmi $(docker images -q -f "dangling=true")'
+alias drmi='docker rmi'
+alias dc='docker compose'

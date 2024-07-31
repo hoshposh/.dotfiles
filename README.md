@@ -12,7 +12,7 @@ My aliases repo.
     cd ~ && git clone https://github.com/tdharris/.dotfiles.git .dotfiles
     ```
 
-2. Enable aliases in the shell by adding to the `~/.bashrc` file:
+2. Enable aliases in the shell by adding to the `~/.zshrc` file:
 
     ```bash
     cd .dotfiles && ./install.sh
@@ -26,7 +26,7 @@ My aliases repo.
     cd ~ && git clone https://github.com/tdharris/.dotfiles.git .dotfiles
     ```
 
-2. Enable aliases in the shell by adding the following to the `~/.bashrc` or `~/profile` file:
+2. Enable aliases in the shell by adding the following to the `~/.zshrc` or `~/profile` file:
 
     ```console
     if [[ -f "~/.dotfiles/bootstrap.sh" ]]; then
@@ -38,4 +38,10 @@ My aliases repo.
 
     ```console
     source ~/.dotfiles/bootstrap.sh
+    ```
+
+4. Symlink the `.dotfiles/.tool-versions` to the `$HOME` folder:
+
+    ```console
+    source ~/.dotfiles/util/init.sh
     ```

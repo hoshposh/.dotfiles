@@ -1,0 +1,13 @@
+#!/usr/bin/env zsh
+#################################################################
+#
+# String Aliases
+#
+#################################################################
+
+function string_multiline_contains {
+  local -r haystack="$1"
+  local -r needle="$2"
+
+  echo "$haystack" | grep -q "$needle"
+}

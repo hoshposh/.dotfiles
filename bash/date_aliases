@@ -1,0 +1,14 @@
+#!/usr/bin/env zsh
+
+#################################################################
+#
+# Date Aliases
+#
+#################################################################
+
+# establish a date() function that uses GNU date
+# https://www.shell-tips.com/linux/how-to-format-date-and-time-in-linux-macos-and-bash/#how-to-calculate-the-difference-between-two-dates-in-shell
+# gdate is installed through homebrew coreutils plugin
+date() {
+    if type -p gdate &>/dev/null; then gdate "$@"; else date "$@"; fi
+}

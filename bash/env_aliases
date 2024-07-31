@@ -1,62 +1,60 @@
+#!/usr/bin/env zsh
+
 #################################################################
 #
 # Environment Aliases
 #
 #################################################################
 
+alias l='ls -lA'
+alias mail-op='open http://localhost:$(var=$(dc port mail 1080) ; echo ${var##*:})'
 
 
 #################################################################
 # Helper Functions
 #################################################################
 
-function aws_auth {
-	if [[ -z "$AWS_MFA_ARN" ]]; then
-		echo "ERROR: Environment Variable 'AWS_MFA_ARN' is missing."
-		return 1
-	fi
+# AWS Auth routine that uses 1Password
+# https://github.com/gruntwork-io/module-security/blob/master/modules/aws-auth/AWS-AUTH-1PASSWORD.md
+function aws_auth() {
+  local -r profile="$1"
+  local -r coe_nonprod="d2rmwdvwujah7ennnfelfdz3he"
+  local -r coe_prod="aauv3se7nbcxtjrx5h67vcqazq"
+  local -r idmapps="7qrvavo6cvfvzkmtalswmapxhi"
+  local -r op_nonprod="AWS-SSADev-NonProd"
+  local -r op_prod="AWS-SSASecurity-Prod"
+  local -r op_idmapps="Work AWS Sign-In"
+  local -r op_vault="Personal"
 
-	local totp_token
-	if [[ -n "$BW_ITEM_NAME" ]]; then
-		# Retrieve from bw cli if available
-		totp_token="$(getmfa "$BW_ITEM_NAME")"
-	else
-		echo "$AWS_MFA_ARN"
-		read -rsp "TOTP: " totp_token
-		echo
-	fi
-	if [[ -z "$totp_token" ]]; then
-		echo "ERROR: Failed to retrieve totp token." && return 1
-	fi
+  case $profile in
+      coe_prod)
+      AWS_ITEM_ID="$coe_prod"
+    OP_ITEM_ID="$op_prod"
+    ;;
+      coe_nonprod)
+      AWS_ITEM_ID="$coe_nonprod"
+    OP_ITEM_ID="$op_nonprod"
+    ;;
+      idmapps)
+      AWS_ITEM_ID="$idmapps"
+    OP_ITEM_ID="$op_idmapps"
+    ;;
+      *)
+      AWS_ITEM_ID="$coe_prod"
+    OP_ITEM_ID="$op_prod"
+      ;;
+  esac
 
-	# Set USER Workaround to set --role-session-name
-	USER="usage-patterns"
-	local -r ROLE_DURATION_SECONDS="7200" # MaxSessionDuration for this role is 2 hours
-	local result
-	if [[ -z "$1" ]]; then
-		result="$(aws-auth \
-			--role-duration-seconds "$ROLE_DURATION_SECONDS" \
-			--serial-number "$AWS_MFA_ARN" \
-			--token-code "$totp_token")"
-	else
-		# assume_iam_role "$1"
-		result="$(aws-auth \
-			--role-duration-seconds "$ROLE_DURATION_SECONDS" \
-			--serial-number "$AWS_MFA_ARN" \
-			--token-code "$totp_token" \
-			--role-arn "$1")"
-	fi
-	if [[ ! "$result" =~ "export " ]]; then
-		echo "$result"
-		echo "ERROR: Invalid aws_auth response"
-		return 1
-	fi
+  local -r op_read="op://${op_vault}/${OP_ITEM_ID}/Access Keys"
 
-	eval "$result"
-}
+  eval $(op signin)
+  export AWS_ACCESS_KEY_ID="$(op read "${op_read}/AWS_ACCESS_KEY_ID")"
+  export AWS_SECRET_ACCESS_KEY="$(op read "${op_read}/AWS_SECRET_ACCESS_KEY")"
+  export AWS_DEFAULT_REGION="$(op read "${op_read}/AWS_REGION")"
+  export AWS_TOTP_SERIAL_NUMBER="$(op read "${op_read}/AWS_TOTP_SERIAL_NUMBER")"
+  AWS_AUTH=(aws-auth --serial-number "${AWS_TOTP_SERIAL_NUMBER}" --token-code $(op item get "${AWS_ITEM_ID}" --vault ${op_vault} --otp))
 
-function getmfa {
-	bw get totp "$1"
+  eval "$($AWS_AUTH)"
 }
 
 function env-aws-clear { 

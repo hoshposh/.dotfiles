@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 
 set -e
 
@@ -7,13 +7,13 @@ readonly base_dir="$HOME/.dotfiles"
 readonly bootstrap_path="$base_dir/bootstrap.sh"
 readonly bootstrap_source_path="\$HOME/.dotfiles/bootstrap.sh"
 
-if grep "source \"$bootstrap_source_path\"" "$HOME/.bashrc" &>/dev/null; then
+if grep "source \"$bootstrap_source_path\"" "$HOME/.zshrc" &>/dev/null; then
 	echo "Already installed."
 	exit 0
 else
-	echo "Backing up .bashrc"
-	cp -v "$HOME/.bashrc" "$HOME/.bashrc.$(date '+%Y-%m-%d').bak"
-	cat <<EOF >>"$HOME/.bashrc"
+	echo "Backing up .zshrc"
+	cp -v "$HOME/.zshrc" "$HOME/.zshrc.$(date '+%Y-%m-%d').bak"
+	cat <<EOF >>"$HOME/.zshrc"
 
 
 # .dotfiles
@@ -23,9 +23,6 @@ fi
 EOF
 
 	source "$bootstrap_path"
-	if [[ "$USER" == "gitpod" ]]; then
-		"$(dirname "$bootstrap_path")/util/gitpod.sh"
-	fi
 
 	"$base_dir/util/init.sh"
 

@@ -37,53 +37,44 @@ function assume_iam_role {
 }
 
 function aws_identity_is_iam_role {
-	local -r iam_role="${1:-$TERRAGRUNT_IAM_ROLE}"
-	local -r current_identity="$(aws sts get-caller-identity)" || return 1
+  local -r iam_role="${1:-$TERRAGRUNT_IAM_ROLE}"
+  local -r current_identity="$(aws sts get-caller-identity)"
 
-	local -r current_account="$(echo "$current_identity" | jq -r '.Account')"
-	local -r current_name="$(echo "$current_identity" | jq -r '.Arn' | cut -d: -f6)"
+  local -r current_account="$(echo "$current_identity" | jq -r '.Account')"
+  local -r current_name="$(echo "$current_identity" | jq -r '.Arn' | cut -d: -f6)"
 
-	local -r iam_role_account="$(echo "$iam_role" | cut -d: -f5)"
-	local -r iam_role_name="$(echo "$iam_role" | cut -d: -f6)"
+  local -r iam_role_account="$(echo "$iam_role" | cut -d: -f5)"
+  local -r iam_role_name="$(echo "$iam_role" | cut -d: -f6)"
 
-	if [[ "$iam_role_account" != "$current_account" ]]; then
-		return 1
-	elif [[ "$iam_role_name" =~ "$current_name" ]]; then
-		return 1
-	else
-		return 0
-	fi
+  if [[ "$iam_role_account" != "$current_account" ]]; then
+    return 1
+  elif [[ "$iam_role_name" =~ "$current_name" ]]; then
+    return 1
+  else
+    return 0
+  fi
 }
 
 function aws_sts_start_privileged_session {
-	local -r iam_role="${1:-$TERRAGRUNT_IAM_ROLE}"
+  local -r iam_role="${1:-$TERRAGRUNT_IAM_ROLE}"
 
-	# Assume role if needed
-	if ! aws_identity_is_iam_role "$iam_role"; then
-		# Validate AWS Caller Identity exists
-		# Set globally for use in 'aws_sts_end_privileged_session'
-		unset AWS_CURRENT_ACCESS_KEY_ID AWS_CURRENT_SECRET_ACCESS_KEY AWS_CURRENT_SESSION_TOKEN
-		AWS_CURRENT_ACCESS_KEY_ID="$(printenv AWS_ACCESS_KEY_ID)" || {
-			echo "ERROR Missing AWS_ACCESS_KEY_ID Environment Variable."
-			exit 1
-		}
-		AWS_CURRENT_SECRET_ACCESS_KEY="$(printenv AWS_SECRET_ACCESS_KEY)" || {
-			echo "ERROR Missing AWS_SECRET_ACCESS_KEY Environment Variable."
-			exit 1
-		}
-		AWS_CURRENT_SESSION_TOKEN="$(printenv AWS_SESSION_TOKEN)" || { echo "WARNING Missing AWS_SESSION_TOKEN Environment Variable. May be required for sts:AssumeRole."; }
+  # Validate AWS Caller Identity exists
+  # Set globally for use in 'aws_sts_end_privileged_session'
+  AWS_CURRENT_ACCESS_KEY_ID="$(printenv AWS_ACCESS_KEY_ID)" || { echo "ERROR Missing AWS_ACCESS_KEY_ID Environment Variable."; exit 1; }
+  AWS_CURRENT_SECRET_ACCESS_KEY="$(printenv AWS_SECRET_ACCESS_KEY)" || { echo "ERROR Missing AWS_SECRET_ACCESS_KEY Environment Variable."; exit 1; }
+  AWS_CURRENT_SESSION_TOKEN="$(printenv AWS_SESSION_TOKEN)" || { echo "WARNING Missing AWS_SESSION_TOKEN Environment Variable. May be required for sts:AssumeRole."; }
 
-		assume_iam_role "$iam_role"
-	fi
+  # Assume role if needed
+  if ! aws_identity_is_iam_role "$iam_role"; then
+      assume_iam_role "$iam_role"
+  fi
 }
 
 function aws_sts_end_privileged_session {
-	if [[ -n "$AWS_CURRENT_ACCESS_KEY_ID" && -n "$AWS_CURRENT_SECRET_ACCESS_KEY" && -n "$AWS_CURRENT_SESSION_TOKEN" ]]; then
-		echo "Finished privileged session, switching to previous AWS Caller Identity."
-		export AWS_ACCESS_KEY_ID="$AWS_CURRENT_ACCESS_KEY_ID"
-		export AWS_SECRET_ACCESS_KEY="$AWS_CURRENT_SECRET_ACCESS_KEY"
-		export AWS_SESSION_TOKEN="$AWS_CURRENT_SESSION_TOKEN"
-	fi
+  echo "Finished privileged session, switching to previous AWS Caller Identity."
+  export AWS_ACCESS_KEY_ID="$AWS_CURRENT_ACCESS_KEY_ID"
+  export AWS_SECRET_ACCESS_KEY="$AWS_CURRENT_SECRET_ACCESS_KEY"
+  export AWS_SESSION_TOKEN="$AWS_CURRENT_SESSION_TOKEN"
 }
 
 # Docker Login to AWS ECR
@@ -131,3 +122,57 @@ function aws_ecr_latest_versions {
 		--no-cli-pager \
 		--output table
 }
+
+function env_aws_assume_iam_role {
+  if [[ "$1" == "--role" ]]; then
+    shift
+    local -r iam_role="$1"
+    shift
+  else
+    local -r iam_role="${TERRAGRUNT_IAM_ROLE:-}"
+  fi
+
+  if ! aws_identity_is_iam_role "$iam_role"; then
+    aws_sts_start_privileged_session "$iam_role"
+  fi
+
+  command aws "$@"
+
+  aws_sts_end_privileged_session
+}
+
+alias aws_env="env_aws_assume_iam_role"
+
+function get-ig-tenant-secrets {
+  local -r iam_role="${1:-${TERRAGRUNT_IAM_ROLE}}"
+  local -r aws_auth_security_account="${2:-true}"
+
+  if "$aws_auth_security_account"; then
+    # Validate AWS Caller Identity is set (presume Security Account)
+    local -r aws_security_access_key_id="$(printenv AWS_ACCESS_KEY_ID)"
+    local -r aws_security_secret_access_key="$(printenv AWS_SECRET_ACCESS_KEY)"
+    local -r aws_security_session_token="$(printenv AWS_SESSION_TOKEN)"
+
+    if [[ -z "$aws_security_access_key_id" || -z "$aws_security_secret_access_key" ]]; then
+      echo "ERROR: No Current AWS Identity."
+      aws sts get-caller-identity
+      return 1
+    fi
+
+  fi
+
+  # Assume Role
+  assume_iam_role "$iam_role" &&
+    unset TF_VAR_master_password TF_VAR_db_ig_password TF_VAR_db_rpt_password TF_VAR_db_reports_usr_password TF_VAR_smtp_password TF_VAR_db_wf_password &&
+    echo 'Fetching tenant secrets...' &&
+    eval "$(.env/env.sh)" &&
+    printenv | grep 'TF_VAR_' | while read -r line; do if [[ -z "$(echo "$line" | cut -d= -f2)" ]]; then echo "$line"; else echo "$line" | sed 's/=.*/=<sensitive>/'; fi; done
+
+  if "$aws_auth_security_account"; then
+    echo "✔ Switching to previous AWS Caller Identity."
+    export AWS_ACCESS_KEY_ID="$aws_security_access_key_id"
+    export AWS_SECRET_ACCESS_KEY="$aws_security_secret_access_key"
+    export AWS_SESSION_TOKEN="$aws_security_session_token"
+  fi
+}
+

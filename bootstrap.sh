@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 
 DOTFILES_DIR="$HOME/.dotfiles"
 
@@ -24,4 +24,5 @@ for git_submodule in personal wrk; do
 	fi
 done
 
-source "$DOTFILES_DIR/util/auth_env.sh"
+# No bitwarden so commenting out
+# source "$DOTFILES_DIR/util/auth_env.sh"
