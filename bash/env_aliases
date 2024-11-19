@@ -8,7 +8,7 @@
 
 alias l='ls -lA'
 alias mail-op='open http://localhost:$(var=$(dc port mail 1080) ; echo ${var##*:})'
-
+alias op_run="op run --"
 
 #################################################################
 # Helper Functions

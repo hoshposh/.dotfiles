@@ -9,5 +9,6 @@ function printenv_tf_var {
 }
 
 alias tf="terraform"
+alias tf_op="op run -- terraform"
 alias tf-debug="export TF_LOG=DEBUG; export TF_LOG_PATH=\"/tmp/terraform.log\""
 alias tf-trace="export TF_LOG=TRACE; export TF_LOG_PATH=\"/tmp/terraform.log\""

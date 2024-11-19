@@ -56,6 +56,9 @@ alias tgol="terragrunt_local_module_source output"
 alias tginl="terragrunt_local_module_source init"
 alias tgprl="terragrunt_local_module_source providers"
 
+# Update tenant alias
+alias ut='update-tenant --auto-approve'
+
 function terragrunt_local_module_source {
 	local -r action="${1:-apply}"; shift;
 	local -r INFRA_MODULES="${FOCUSSAAS_INFRA_MODULES}"

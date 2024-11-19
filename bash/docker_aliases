@@ -14,3 +14,68 @@ alias drma='docker rm -f $(docker ps -qa)'
 alias drmil='docker rmi $(docker images -q -f "dangling=true")'
 alias drmi='docker rmi'
 alias dc='docker compose'
+
+function deb_scan() {
+  local repo="${DEBRICKED_REPO}"
+  local version="${DEBRICKED_REPO_VERSION}"
+  
+  # assign input arguments to an array
+  local -a debricked_args=("scan" ".")
+  local -a user_args=("$@")
+  local -a exclusions_array=()
+  local -a inclusions_array=()
+
+  local -r author="${DEBRICKED_AUTHOR}"
+  local -r token="${DEBRICKED_TOKEN}"
+  local -r log_ctx="deb_scan"
+  local -r json_file=".debricked/props.json"
+
+  # check if props.json exists
+  if [[ -f "$json_file" ]]; then
+    local -r props=$(cat "$json_file")
+    log info "$log_ctx: Using JSON properties file - $json_file"
+
+    repo=$(echo $props | jq -r '.repository')
+    log info "$log_ctx: Repository - $repo"
+
+    version=$(echo $props | jq -r '.version')
+    log info "$log_ctx: version - $version"
+    readonly repo version
+
+    exclusions_array=($(echo $props | jq -r '.exclusions[]?'))
+    if [ -n "$exclusions_array" ]; then
+      log info "$log_ctx: Exclusions - $exclusions_array"
+    fi
+
+    inclusions_array=($(echo $props | jq -r '.inclusions[]?'))
+    if [ -n "$inclusions_array" ]; then
+      log info "$log_ctx: Inclusions - $inclusions_array"
+    fi
+  fi
+
+  # Add required arguments
+  debricked_args+=("-r" "$repo" "-b" "$version" "-a" "$author" "-t" "$token")
+
+  # Add inclusions
+  if [ -n "$inclusions_array" ]; then
+    for inclusion in "${inclusions_array[@]}"; do
+      debricked_args+=("--inclusion" "$inclusion")
+    done
+  fi
+
+  # Add exclusions
+  if [ -n "$exclusions_array" ]; then
+    for exclusion in "${exclusions_array[@]}"; do
+      debricked_args+=("-e" "$exclusion")
+    done
+  fi
+
+  # add user arguments to the debricked_args array
+  if [ -n "$user_args" ]; then
+    debricked_args+=("$user_args[@]")
+  fi
+
+  log info "$log_ctx: Running Debricked scan"
+  log debug "$log_ctx: debricked_args - ${debricked_args[@]}"
+  drit --rm -v "$PWD:/work" -v "$HOME/.m2/settings.xml:/root/.m2/settings.xml" -w /work debricked/cli:2-resolution-debian debricked "${debricked_args[@]}"
+}
