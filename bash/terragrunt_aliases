@@ -106,13 +106,65 @@ function terragrunt_local_module_source {
 
 
 function iac_helm_diff_plan {
-  local -r plan="tf.plan"
+	local -r plan="${TMPDIR}/tf.plan"
+	local -r new_yaml="${TMPDIR}/new.yaml"
+	local -r old_yaml="${TMPDIR}/old.yaml"
 
-  terragrunt plan --terragrunt-source-update -no-color > "$plan" && \
-  cat "$plan" | awk '/helm_release/,/^    }/' | awk '/- <<~EOT/,/EOT,/' > old.yaml && \
-  cat "$plan" | awk '/helm_release/,/^    }/' | awk '/\+ <<~EOT/,/EOT,/' > new.yaml && \
-  git --no-pager diff --no-index old.yaml new.yaml
-  
-  echo -e "\n$plan\nold.yaml\nnew.yaml"
-    rm -f old.yaml new.yaml "$plan"
+	terragrunt plan --terragrunt-source-update -no-color >"$plan" &&
+		awk '/helm_release/,/^    }/' < "$plan" | awk '/- <<-EOT/,/EOT,/' > "$old_yaml" &&
+		awk '/helm_release/,/^    }/' < "$plan" | awk '/\+ <<-EOT/,/EOT,/' > "$new_yaml" &&
+		git diff --no-index "$old_yaml" "$new_yaml"
+
+	if [[ ! -s "$old_yaml" || ! -s "$new_yaml"  ]]; then
+		echo "ERROR: Failed to obtain helm chart diff"
+		cat "$plan"
+		rm "$old_yaml" "$new_yaml" "$plan" 2>/dev/null
+		return 1
+	else
+		echo -e "\n$plan\n$old_yaml\n$new_yaml"
+		if ask "Do you want to delete these temporary files?"; then
+			rm -v "$old_yaml" "$new_yaml" "$plan"
+		fi
+	fi
+}
+
+function ut_44 {
+	local -r tenant=${1}
+	local -r upper_tenant=$(echo "$tenant" | tr '[:lower:]' '[:upper:]')
+	if [[ -z "$tenant" ]]; then
+		echo "ERROR: Missing tenant argument"
+		return 1
+	fi
+	ut start-maintenance -w && \
+	ut scale-pods -w --wait --all -p 0 --ignore "k8s-amq,k8s-wf-amq" && \
+	ut dms stop-migration-task && \
+	ut kubectl patch cronjob "$tenant-srv-ig-dbinit-audit-job-v1" -n applications -p '{"spec" : {"suspend" : true }}' && \
+	ut db-backup -w --db-snapshot-suffix "pre-440" && \
+	ut apply --tenant-context data-stores/aurora-postgresql && \
+	ut apply --tenant-context services/migration-script && \
+	ut apply --tenant-context services/ig-dbinit-job && \
+	ut apply --tenant-context services/wf-dbinit-job && \
+	ut apply --tenant-context services/k8s-amq && \
+	ut apply --tenant-context services/k8s-ig && \
+	kc_env rollout status deployment "$tenant-srv-ig" -n applications --timeout=120s && \
+	ut get-version && \
+	ut apply --tenant-context services/k8s-rpt && \
+	kc_env rollout status deployment "$tenant-srv-rpt" -n applications --timeout=120s && \
+	ut get-version --k8s-service k8s-rpt && \
+	ut apply --tenant-context services/k8s-wf-amq && \
+	ut apply --tenant-context services/k8s-wf && \
+	kc_env rollout status deployment "$tenant-wf-srv" -n workflow --timeout=120s && \
+	ut get-version --k8s-service k8s-wf && \
+	ut dms start-migration-task && \
+	ut end-maintenance --configuration '{
+		"tenantId":"'"${upper_tenant}"'",
+		"igaVersion": "4.4.0",
+		"contentBucket": "ig-440-content.iam-services.cyberresdev.com",
+		"contentBucketUrl": "https://s3.us-east-2.amazonaws.com/ig-440-content.iam-services.cyberresdev.com",
+		"maintenanceInstructions":{
+			"maintenanceStartGMT":0,
+			"maintenanceURL":"https://s3.us-east-2.amazonaws.com/s3-jam-021-admin-content.iam-services.cyberresdev.com",
+			"maintenanceEndGMT":0
+		}
+	}'
 }
