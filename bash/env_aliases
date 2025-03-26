@@ -18,30 +18,23 @@ alias op_run="op run --"
 # https://github.com/gruntwork-io/module-security/blob/master/modules/aws-auth/AWS-AUTH-1PASSWORD.md
 function aws_auth() {
   local -r profile="$1"
-  local -r coe_nonprod="d2rmwdvwujah7ennnfelfdz3he"
-  local -r coe_prod="aauv3se7nbcxtjrx5h67vcqazq"
-  local -r idmapps="7qrvavo6cvfvzkmtalswmapxhi"
   local -r op_nonprod="AWS-SSADev-NonProd"
   local -r op_prod="AWS-SSASecurity-Prod"
   local -r op_idmapps="Work AWS Sign-In"
-  local -r op_vault="Personal"
+  local -r op_vault="Work"
 
   case $profile in
       coe_prod)
-      AWS_ITEM_ID="$coe_prod"
-    OP_ITEM_ID="$op_prod"
+      OP_ITEM_ID="$op_prod"
     ;;
       coe_nonprod)
-      AWS_ITEM_ID="$coe_nonprod"
-    OP_ITEM_ID="$op_nonprod"
+      OP_ITEM_ID="$op_nonprod"
     ;;
       idmapps)
-      AWS_ITEM_ID="$idmapps"
-    OP_ITEM_ID="$op_idmapps"
+      OP_ITEM_ID="$op_idmapps"
     ;;
       *)
-      AWS_ITEM_ID="$coe_prod"
-    OP_ITEM_ID="$op_prod"
+      OP_ITEM_ID="$op_prod"
       ;;
   esac
 
@@ -52,7 +45,7 @@ function aws_auth() {
   export AWS_SECRET_ACCESS_KEY="$(op read "${op_read}/AWS_SECRET_ACCESS_KEY")"
   export AWS_DEFAULT_REGION="$(op read "${op_read}/AWS_REGION")"
   export AWS_TOTP_SERIAL_NUMBER="$(op read "${op_read}/AWS_TOTP_SERIAL_NUMBER")"
-  AWS_AUTH=(aws-auth --serial-number "${AWS_TOTP_SERIAL_NUMBER}" --token-code $(op item get "${AWS_ITEM_ID}" --vault ${op_vault} --otp))
+  AWS_AUTH=(aws-auth --serial-number "${AWS_TOTP_SERIAL_NUMBER}" --token-code $(op item get --vault "${op_vault}" "${OP_ITEM_ID}" --otp))
 
   eval "$($AWS_AUTH)"
 }
@@ -81,4 +74,4 @@ function source_if_exists {
 	fi
 }
 
-source_if_exists "$BASH_COMMONS/modules/bash-commons/src/log.sh"
+source_if_exists "$BASH_COMMONS/log.sh"
