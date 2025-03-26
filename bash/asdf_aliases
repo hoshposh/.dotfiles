@@ -5,7 +5,7 @@
 #################################################################
 
 # Var for asdf_upgrade to filter the latest version
-export ASDF_PLUGIN_java=temurin-11
+export ASDF_PLUGIN_java=temurin-21
 
 # ASDF using SSH for git in plugins that support it
 export ASDF_USE_SSH=true
@@ -21,9 +21,6 @@ function asdf_upgrade {
     local -r plugins="$(asdf plugin list)"
     local -r global_location="$HOME/.tool-versions"
     local -r env_var_prefix="ASDF_PLUGIN_"
-
-    echo -e "\nUpgrading asdf..."
-    asdf update || asdf_fail "Failed to upgrade asdf"
 
     local inst_plugin_location
     if "$update_plugin_repos"; then
@@ -57,10 +54,10 @@ function asdf_upgrade {
       local install_out="$(asdf install "$plugin" "$latest_version" 2>&1)" || asdf_fail "Failed to upgrade $plugin: \n$install_out"
       # echo "$install_out"
       if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
-          inst_plugin_location=$(asdf current "$plugin" | tr -s ' ' | cut -d' ' -f3) 2> /dev/null
+          inst_plugin_location=$(asdf current --no-header "$plugin" | tr -s ' ' | cut -d' ' -f3) 2> /dev/null
           if [[ "$inst_plugin_location" == "$global_location" ]]; then
               echo -e "Setting plugin ($plugin) at GLOBAL scope to latest ($latest_version)..."
-              asdf global "$plugin" "$latest_version" || asdf_fail "Failed to set GLOBAL plugin ($plugin) to $latest_version"
+              asdf set -u "$plugin" "$latest_version" || asdf_fail "Failed to set GLOBAL plugin ($plugin) to $latest_version"
           else
               echo "Skipping GLOBAL plugin ($plugin) upgrade, it is not currently installed globally."
           fi
