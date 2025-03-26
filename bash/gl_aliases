@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#################################################################
+#
+# gh Aliases
+#
+#################################################################
+
+function gl_mr_checkout {
+  local -r search="$1"
+  local -r label="$2"
+
+  local -r pr_selection="$(glab mr list --search "$search" --label "$label" | grep -v '^$\|Showing.*(Page.*)' | fzf --prompt " Please select the MR > ")"
+  local -r pr="$(echo "$pr_selection" | awk '{print $1}')"
+
+  if [[ -z "$pr" ]]; then
+    log warn "No MR selected, exiting."
+    return 1
+  fi
+
+  glab mr checkout "$pr"
+}
+
+function gl_mr_comment {
+  local -r comment="$1"
+
+  glab mr comment --message "$comment"
+}
+
+function gl_mr_is_approved {
+  local -r merge_status="$(glab mr view -F json | jq -r '.detailed_merge_status')" || return 1
+  if [[ "$merge_status" == "mergeable" ]]; then
+    return 0
+  else
+    return 1
+  fi
+}

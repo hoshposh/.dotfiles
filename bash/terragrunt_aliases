@@ -5,16 +5,16 @@
 #################################################################
 
 function wgrep {
-	grep --exclude=\*.{svg,otf} --exclude-dir={\*.git\*,\*.terraform\*,\*.terragrunt-cache\*,\*_dev_ref\*,\*bridge-website\*,\*node_modules\*} -r "$@" .
+  grep --exclude=\*.{svg,otf} --exclude-dir={\*.git\*,\*.terraform\*,\*.terragrunt-cache\*,\*_dev_ref\*,\*bridge-website\*,\*node_modules\*} -r "$@" .
 }
 
 function wfind {
-	find . -not -path "*/.terragrunt-cache/*" "$@" 
+  find . -not -path "*/.terragrunt-cache/*" "$@"
 }
 
 alias tg='terragrunt'
-alias tgaf="terragrunt apply"   # "fast"
-alias tgpf="terragrunt plan"    # "fast"
+alias tgaf="terragrunt apply" # "fast"
+alias tgpf="terragrunt plan"  # "fast"
 alias tga="terragrunt apply --terragrunt-source-update"
 alias tgp="terragrunt plan --terragrunt-source-update"
 alias tgd="terragrunt destroy"
@@ -59,112 +59,348 @@ alias tgprl="terragrunt_local_module_source providers"
 # Update tenant alias
 alias ut='update-tenant --auto-approve'
 
+# Docker based infra using devops image
+alias tgdevops='drit --rm -v $HOME/.devops-ssh:/root/.ssh -v $HOME/.devops-gitconfig:/root/.gitconfig -v $FOCUSSAAS_INFRA_MODULES:/work/infra-modules -v $FOCUSSAAS_INFRA_LIVE:/work/infra-live -e AWS_PROFILE -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e FOCUSSAAS_INFRA_LIVE="/work/infra-live" -e FOCUSSAAS_INFRA_MODULES="/work/infra-modules" -e GITHUB_OAUTH_TOKEN -e GITHUB_TOKEN="$GITHUB_OAUTH_TOKEN" -e GITLAB_TOKEN -e GIT_USER_NAME=hoshposh -e GIT_USER_EMAIL=lwashington@opentext.com -e USE_GIT_HTTPS=true -e TERRAGRUNT_IAM_ROLE -e TERRAGRUNT_SOURCE_UPDATE=true -w /work/infra-live/dev/us-east-2/igalw-srv-ig idgov-docker.svsartifactory.swinfra.net/idmapps/ig-devops-image:0.2.0-SNAPSHOT /bin/bash'
+alias tgdevops_dev='drit --rm -v $HOME/.devops-ssh:/root/.ssh -v $HOME/.devops-gitconfig:/root/.gitconfig -v $FOCUSSAAS_INFRA_MODULES:/work/infra-modules -v $FOCUSSAAS_INFRA_LIVE:/work/infra-live -e AWS_PROFILE -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e FOCUSSAAS_INFRA_LIVE="/work/infra-live" -e FOCUSSAAS_INFRA_MODULES="/work/infra-modules" -e GITHUB_OAUTH_TOKEN -e GITHUB_TOKEN="$GITHUB_OAUTH_TOKEN" -e GITLAB_TOKEN -e GIT_USER_NAME=hoshposh -e GIT_USER_EMAIL=lwashington@opentext.com -e USE_GIT_HTTPS=true -e TERRAGRUNT_IAM_ROLE -e TERRAGRUNT_SOURCE_MAP="git::ssh://git@hmf.gitlab.otxlab.net/infrastructure-ops-saas/cybersecurity-saas/infrastructure-modules.git=/work/infra-modules" -e TERRAGRUNT_SOURCE_UPDATE=true -w /work/infra-live/dev/us-east-2/igalw-srv-ig idgov-docker.svsartifactory.swinfra.net/idmapps/ig-devops-image:0.2.0-SNAPSHOT /bin/bash'
+
 function terragrunt_local_module_source {
-	local -r action="${1:-apply}"; shift;
-	local -r INFRA_MODULES="${FOCUSSAAS_INFRA_MODULES}"
-	local -r hcl_file="terragrunt.hcl"
-	
-	if [[ -z "$INFRA_MODULES" || ! -d "$INFRA_MODULES" ]]; then
-		echo "ERROR: INFRA_MODULES is not set or is not a directory: $INFRA_MODULES"
-		return 1
-	fi
-	if [[ ! -f "$hcl_file" ]]; then echo "ERROR: No $hcl_file file found in current directory"; return 1; fi
+  local -r action="${1:-apply}"
+  shift
+  local -r INFRA_MODULES="${FOCUSSAAS_INFRA_MODULES}"
+  local -r hcl_file="terragrunt.hcl"
 
-	local args=()
-	while [[ $# -gt 0 ]]; do
-		key="$1"
-		case $key in
-			-b | --branch)
-				local -r branch="$2"; shift ;;
-			-i | --infra-modules)
-				INFRA_MODULES="$2"; shift ;;
-			*)
-				args+=("$1"); shift ;;
-		esac
-	done
+  if [[ -z "$INFRA_MODULES" || ! -d "$INFRA_MODULES" ]]; then
+    echo "ERROR: INFRA_MODULES is not set or is not a directory: $INFRA_MODULES"
+    return 1
+  fi
+  if [[ ! -f "$hcl_file" ]]; then
+    echo "ERROR: No $hcl_file file found in current directory"
+    return 1
+  fi
 
-	# if there is a value for "branch" and it's not empty, let's use it
-	if [[ -n "$branch" ]]; then
-		local -r current_source="$(grep -r 'source\s*=' $hcl_file | grep -v '^#\|\s*#' | sed 's|source\s*=\s*"||g' | tr -d "[:blank:]" | sed 's|"$||' | head -n1)"
-		local -r source="$(echo "$current_source" | sed "s|?ref=.*|?ref="$branch"|")"
-		# local -r source="${current_source//?ref=.*/?ref=$branch}"
-	else
-		local -r source="$(echo "$INFRA_MODULES//$(grep -r 'source\s*=' $hcl_file | grep -v '^#\|\s*#' | sed 's|.*//||' | sed 's|?ref.*||g' | sed 's|"$||' | head -n1)")"
-		if [[ ! -d "$source" ]]; then
-			echo "ERROR: source is not a directory: $source"
-			return 1
-		fi
-	fi
-	
-	echo terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source" "${args[@]}"
-	if [[ "${#args[@]}" -ne 0 ]]; then
-		terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source" "${args[@]}"
-	else
-		terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source"
-	fi
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+    -b | --branch)
+      local -r branch="$2"
+      shift
+      ;;
+    -i | --infra-modules)
+      INFRA_MODULES="$2"
+      shift
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+    esac
+  done
+
+  # if there is a value for "branch" and it's not empty, let's use it
+  if [[ -n "$branch" ]]; then
+    local -r current_source="$(grep -r 'source\s*=' $hcl_file | grep -v '^#\|\s*#' | sed 's|source\s*=\s*"||g' | tr -d "[:blank:]" | sed 's|"$||' | head -n1)"
+    local -r source="$(echo "$current_source" | sed "s|?ref=.*|?ref="$branch"|")"
+    # local -r source="${current_source//?ref=.*/?ref=$branch}"
+  else
+    local -r source="$(echo "$INFRA_MODULES//$(grep -r 'source\s*=' $hcl_file | grep -v '^#\|\s*#' | sed 's|.*//||' | sed 's|?ref.*||g' | sed 's|"$||' | head -n1)")"
+    if [[ ! -d "$source" ]]; then
+      echo "ERROR: source is not a directory: $source"
+      return 1
+    fi
+  fi
+
+  echo terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source" "${args[@]}"
+  if [[ "${#args[@]}" -ne 0 ]]; then
+    terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source" "${args[@]}"
+  else
+    terragrunt "$action" --terragrunt-source-update --terragrunt-source "$source"
+  fi
 }
 
-
 function iac_helm_diff_plan {
-	local -r plan="${TMPDIR}/tf.plan"
-	local -r new_yaml="${TMPDIR}/new.yaml"
-	local -r old_yaml="${TMPDIR}/old.yaml"
+  local -r plan="${TMPDIR}/tf.plan"
+  local -r new_yaml="${TMPDIR}/new.yaml"
+  local -r old_yaml="${TMPDIR}/old.yaml"
 
-	terragrunt plan --terragrunt-source-update -no-color >"$plan" &&
-		awk '/helm_release/,/^    }/' < "$plan" | awk '/- <<-EOT/,/EOT,/' > "$old_yaml" &&
-		awk '/helm_release/,/^    }/' < "$plan" | awk '/\+ <<-EOT/,/EOT,/' > "$new_yaml" &&
-		git diff --no-index "$old_yaml" "$new_yaml"
+  terragrunt plan --terragrunt-source-update -no-color >"$plan" &&
+    diff_plan "$plan"
+}
 
-	if [[ ! -s "$old_yaml" || ! -s "$new_yaml"  ]]; then
-		echo "ERROR: Failed to obtain helm chart diff"
-		cat "$plan"
-		rm "$old_yaml" "$new_yaml" "$plan" 2>/dev/null
-		return 1
-	else
-		echo -e "\n$plan\n$old_yaml\n$new_yaml"
-		if ask "Do you want to delete these temporary files?"; then
-			rm -v "$old_yaml" "$new_yaml" "$plan"
-		fi
-	fi
+function diff_plan {
+  local -r plan=${1:-$TMPDIR/tf.plan}
+  local -r new_yaml="${TMPDIR}/new.yaml"
+  local -r old_yaml="${TMPDIR}/old.yaml"
+
+  awk '/helm_release/,/^    }/' <"$plan" | awk '/- <<-EOT/,/EOT,/' >"$old_yaml" &&
+    awk '/helm_release/,/^    }/' <"$plan" | awk '/\+ <<-EOT/,/EOT,/' >"$new_yaml" &&
+    git --no-pager diff --no-index "$old_yaml" "$new_yaml"
+
+  if [[ ! -s "$old_yaml" || ! -s "$new_yaml" ]]; then
+    echo "ERROR: Failed to obtain helm chart diff"
+    cat "$plan"
+    rm "$old_yaml" "$new_yaml" 2>/dev/null
+    return 1
+  else
+    echo -e "\n$plan\n$old_yaml\n$new_yaml"
+    if ask "Do you want to delete these temporary files?"; then
+      rm -v "$old_yaml" "$new_yaml"
+    fi
+  fi
+}
+
+# shellcheck disable=SC2120
+function prompt_proceed_or_exit {
+  local -r message="${1:-Proceed with the upgrade?}"
+
+  if ! ask "$message"; then
+    log error "Aborting"
+    return 1
+  fi
+}
+
+function tg_apply_kubernetes_job {
+  local -r tg_path="$1"
+  local -r namespace="$2"
+  local -r job_name="$3"
+
+  log info "Applying $tg_path"
+  ut apply --tenant-context "$tg_path"
+  log info "Retrieving $job_name SEVERE logs"
+  aws_sts_start_privileged_session
+  (
+    log info "Searching for 'SEVERE' logs from $job_name, press 'q' to Exit."
+    kubectl -n "$namespace" logs "job/$(kubectl get jobs -A -o json | jq -r --arg generateName "$job_name" '.items[] | select(.metadata.generateName == $generateName) | .metadata.name')" --prefix=true | grep -A1 -i "SEVERE"
+  ) |& less
+  aws_sts_end_privileged_session
+  prompt_proceed_or_exit || return 1
+}
+
+function upgrade_k8s_service {
+  local -r k8s_svc_name="$1"
+  local -r deployment_name="$2"
+  local -r namespace="$3"
+
+  echo "INFO: Upgrading $k8s_svc_name"
+  ut apply --tenant-context "services/$k8s_svc_name"
+  aws_sts_start_privileged_session
+  kc_env rollout status "deployment/$deployment_name" -w -n "$namespace"
+  (
+    echo "INFO: Searching for 'SEVERE' logs from deployment.apps/$deployment_name, press 'q' to Exit."
+    kc_env -n "$namespace" logs "deployment.apps/$deployment_name" --all-containers --prefix=true | grep -A1 -i "SEVERE"
+  ) |& less
+  ut get-version --k8s-service "$k8s_svc_name"
+  aws_sts_end_privileged_session
+}
+
+function kubectl_verify_ingress {
+  log info "Checking for ingress in all namespaces"
+  aws_sts_start_privileged_session
+  kubectl get ingress -A
+  prompt_proceed_or_exit || return 1
+  aws_sts_end_privileged_session
+}
+
+function ut_45 {
+  local -r account="dev"
+  local -r region="us-east-2"
+  local -r enable_gl_comment_merge=true
+  local -r infra_live_tenant_context="$FOCUSSAAS_INFRA_LIVE/$account/$region"
+  local -r aws_account_id="$(grep aws_account_id "$FOCUSSAAS_INFRA_LIVE/$account/terragrunt.hcl" | head -n1 | cut -d= -f2- | sed 's|\s||g;s|"||g')"
+  local -r tenant=${1}
+  local -r upper_tenant=$(echo "$tenant" | tr '[:lower:]' '[:upper:]')
+  local -r ig_tag="$(yq ".ig_image_version" services/svc.yaml)"
+  local -r wf_tag="$(yq ".wf_image_version" services/svc.yaml)"
+  local -r ig_job_suffix="${ig_tag//\./-}"
+  local -r wf_job_suffix="${wf_tag//\./-}"
+  local -r ig_job_name="${tenant}-srv-ig-dbinit-${ig_job_suffix}"
+  local -r wf_job_name="${tenant}-srv-wf-dbinit-${wf_job_suffix}"
+  local -r ig_deployment_name="${tenant}-srv-ig"
+  local -r rpt_deployment_name="${tenant}-srv-rpt"
+  local -r wf_deployment_name="${tenant}-wf-srv"
+  local -r db_snapshot_suffix="pre-$(echo "$ig_tag" | sed 's|\.||g;s|-.*||')"
+  local -r aws_region=${AWS_REGION:-$AWS_DEFAULT_REGION}
+  local full_tenant_id="${tenant}"
+  if [[ "$tenant" != "iam-services" ]]; then
+    full_tenant_id="${tenant}-srv-ig"
+  fi
+  readonly full_tenant_id
+  if [[ -z "$tenant" ]]; then
+    echo "ERROR: Missing tenant argument"
+    return 1
+  fi
+  log debug "tenant: $tenant"
+  log debug "upper_tenant: $upper_tenant"
+  log debug "ig_tag: $ig_tag"
+  log debug "wf_tag: $wf_tag"
+  log debug "ig_job_suffix: $ig_job_suffix"
+  prompt_proceed_or_exit "Proceed with the upgrade of ${upper_tenant^^} to IG $ig_tag, WF $wf_tag ?"
+
+  log info "Installing software pre-requisites ..."
+  asdf install || {
+    log error "Failed to install software pre-requisites"
+    exit 1
+  }
+  log info "Finished installing software pre-requisites."
+
+  log info "Switching to kubectl context"
+  kubectx "arn:aws:eks:${aws_region}:${aws_account_id}:cluster/eks-${full_tenant_id}"
+  kubectl_ctx="$(kubectl config current-context)"
+  assert_not_empty_or_null "$kubectl_ctx" "kubectl config current-context"
+  if [[ ! "$kubectl_ctx" =~ $tenant ]]; then
+    log warn "kubectl config current-context does not contain the tenant_id: $tenant"
+  fi
+  prompt_proceed_or_exit "Proceed with current kubectl context? $kubectl_ctx"
+
+  log info "Validating kubectl authentication to the cluster"
+  kc_env auth can-i get pods -A || {
+    log error "kubectl authentication failed"
+    exit 1
+  }
+
+  log info "Starting maintenance"
+  ut start-maintenance -w
+
+  log info "Scaling down deployments"
+  ut scale-pods -w --wait --all -p 0 --ignore "k8s-amq,k8s-wf-amq"
+
+  log info "Stopping dms migration task"
+  ut dms stop-migration-task
+
+  log info "Suspend audit jobs for ig-dbinit-job"
+  ut kubectl patch cronjob "$tenant-srv-ig-dbinit-audit-job-v1" -n applications -p '{"spec" : {"suspend" : true }}'
+
+  log info "Backing up database"
+  ut db-backup -w --db-snapshot-suffix "$db_snapshot_suffix"
+
+  log info "Applying services/migration-script"
+  ut apply --tenant-context services/migration-script
+  tg_apply_kubernetes_job "services/ig-dbinit-job" "applications" "$ig_job_name"
+  tg_apply_kubernetes_job "services/wf-dbinit-job" "workflow" "$wf_job_name"
+
+  upgrade_k8s_service "k8s-ig" "$ig_deployment_name" "applications"
+  upgrade_k8s_service "k8s-rpt" "$rpt_deployment_name" "applications"
+  upgrade_k8s_service "k8s-wf" "$wf_deployment_name" "workflow"
+
+  log info "Validating ingress"
+  kubectl_verify_ingress
+
+  log info "Starting dms migration task"
+  update-tenant dms start-migration-task
+
+  log info "Ending maintenance window"
+  update-tenant end-maintenance --configuration "{
+      \"tenantId\":\"$TENANT_ID\",
+      \"igaVersion\": \"4.5.0\",
+      \"contentBucket\": \"ig-450-content.iam-services.cyberresdev.com\",
+      \"contentBucketUrl\": \"https://s3.$region.amazonaws.com/ig-450-content.iam-services.cyberresdev.com\",
+      \"maintenanceInstructions\":{
+          \"maintenanceStartGMT\":0,
+          \"maintenanceURL\":\"https://s3.$region.amazonaws.com/s3-jam-021-admin-content.iam-services.cyberresdev.com\",
+          \"maintenanceEndGMT\":0
+      }
+  }"
+
+  log info "Applying data-stores/s3-dms-mau"
+  update-tenant apply --tenant-context data-stores/s3-dms-mau
+
+  # workaround for the issue with the `set -u` flag from bash-commons
+  set +u
+  if [[ "$enable_gl_comment_merge" == "true" ]]; then
+    if ask "Upgrade successful? Comment and Merge?"; then
+      gl_mr_comment "✔️ Upgrade successful."
+      if gl_mr_is_approved; then
+        log_info "PR is approved. Merging."
+        glab mr merge --squash --remove-source-branch --yes
+      else
+        log_warn "PR is not approved. Skipping merge."
+      fi
+      git co master
+      git pull
+      cd "$infra_live_tenant_context" || exit 1
+    fi
+  fi
 }
 
 function ut_44 {
-	local -r tenant=${1}
-	local -r upper_tenant=$(echo "$tenant" | tr '[:lower:]' '[:upper:]')
-	if [[ -z "$tenant" ]]; then
-		echo "ERROR: Missing tenant argument"
-		return 1
-	fi
-	ut start-maintenance -w && \
-	ut scale-pods -w --wait --all -p 0 --ignore "k8s-amq,k8s-wf-amq" && \
-	ut dms stop-migration-task && \
-	ut kubectl patch cronjob "$tenant-srv-ig-dbinit-audit-job-v1" -n applications -p '{"spec" : {"suspend" : true }}' && \
-	ut db-backup -w --db-snapshot-suffix "pre-440" && \
-	ut apply --tenant-context data-stores/aurora-postgresql && \
-	ut apply --tenant-context services/migration-script && \
-	ut apply --tenant-context services/ig-dbinit-job && \
-	ut apply --tenant-context services/wf-dbinit-job && \
-	ut apply --tenant-context services/k8s-amq && \
-	ut apply --tenant-context services/k8s-ig && \
-	kc_env rollout status deployment "$tenant-srv-ig" -n applications --timeout=120s && \
-	ut get-version && \
-	ut apply --tenant-context services/k8s-rpt && \
-	kc_env rollout status deployment "$tenant-srv-rpt" -n applications --timeout=120s && \
-	ut get-version --k8s-service k8s-rpt && \
-	ut apply --tenant-context services/k8s-wf-amq && \
-	ut apply --tenant-context services/k8s-wf && \
-	kc_env rollout status deployment "$tenant-wf-srv" -n workflow --timeout=120s && \
-	ut get-version --k8s-service k8s-wf && \
-	ut dms start-migration-task && \
-	ut end-maintenance --configuration '{
-		"tenantId":"'"${upper_tenant}"'",
-		"igaVersion": "4.4.0",
-		"contentBucket": "ig-440-content.iam-services.cyberresdev.com",
-		"contentBucketUrl": "https://s3.us-east-2.amazonaws.com/ig-440-content.iam-services.cyberresdev.com",
-		"maintenanceInstructions":{
-			"maintenanceStartGMT":0,
-			"maintenanceURL":"https://s3.us-east-2.amazonaws.com/s3-jam-021-admin-content.iam-services.cyberresdev.com",
-			"maintenanceEndGMT":0
-		}
-	}'
+  local -r tenant=${1}
+  local -r upper_tenant=$(echo "$tenant" | tr '[:lower:]' '[:upper:]')
+  if [[ -z "$tenant" ]]; then
+    echo "ERROR: Missing tenant argument"
+    return 1
+  fi
+  ut start-maintenance -w &&
+    ut scale-pods -w --wait --all -p 0 --ignore "k8s-amq,k8s-wf-amq" &&
+    ut dms stop-migration-task &&
+    ut kubectl patch cronjob "$tenant-srv-ig-dbinit-audit-job-v1" -n applications -p '{"spec" : {"suspend" : true }}' &&
+    ut db-backup -w --db-snapshot-suffix "pre-440" &&
+    ut apply --tenant-context data-stores/aurora-postgresql &&
+    ut apply --tenant-context services/migration-script &&
+    ut apply --tenant-context services/ig-dbinit-job &&
+    ut apply --tenant-context services/wf-dbinit-job &&
+    ut apply --tenant-context services/k8s-amq &&
+    ut apply --tenant-context services/k8s-ig &&
+    kc_env rollout status deployment "$tenant-srv-ig" -n applications --timeout=120s &&
+    ut get-version &&
+    ut apply --tenant-context services/k8s-rpt &&
+    kc_env rollout status deployment "$tenant-srv-rpt" -n applications --timeout=120s &&
+    ut get-version --k8s-service k8s-rpt &&
+    ut apply --tenant-context services/k8s-wf-amq &&
+    ut apply --tenant-context services/k8s-wf &&
+    kc_env rollout status deployment "$tenant-wf-srv" -n workflow --timeout=120s &&
+    ut get-version --k8s-service k8s-wf &&
+    ut dms start-migration-task &&
+    ut end-maintenance --configuration '{
+        "tenantId":"'"${upper_tenant}"'",
+        "igaVersion": "4.4.0",
+        "contentBucket": "ig-440-content.iam-services.cyberresdev.com",
+        "contentBucketUrl": "https://s3.us-east-2.amazonaws.com/ig-440-content.iam-services.cyberresdev.com",
+        "maintenanceInstructions":{
+            "maintenanceStartGMT":0,
+            "maintenanceURL":"https://s3.us-east-2.amazonaws.com/s3-jam-021-admin-content.iam-services.cyberresdev.com",
+            "maintenanceEndGMT":0
+        }
+    }'
+}
+
+function copy_file_to_ig_pod {
+  local -r local_file_path="$1"
+  local -r remote_file_path="${2:-/tmp/}"
+
+  if [[ ! -f "$local_file_path" ]]; then
+    echo "ERROR: File not found: $local_file_path"
+    return 1
+  fi
+
+  local -r application_name="$(grep "^\s*application_name\s*=" "services/k8s-ig/terragrunt.hcl" | sed 's/.*=//;s/\s//g' | sed 's|\"||g' | head -n1)" || {
+    echo "Failed to get application_name from services/k8s-ig/terragrunt.hcl"
+    return 1
+  }
+
+  if [[ -z "$application_name" ]]; then
+    echo "ERROR: Failed to get the application name from services/k8s-ig/terragrunt.hcl"
+    return 1
+  fi
+
+  kubectl auth can-i get pods -n applications || {
+    echo "ERROR: You do not have permission to get pods in the applications namespace for the current cluster context: $(kubectl config current-context)"
+    return 1
+  }
+
+  local -r pod_name="$(kubectl get pods -l app.kubernetes.io/name="$application_name" -n applications -o jsonpath="{.items[0].metadata.name}")" || {
+    echo "ERROR: Failed to get the pod name for the application: $application_name"
+    return 1
+  }
+
+  if [[ -z "$pod_name" ]]; then
+    echo "ERROR: No pods found for the application: $application_name"
+    return 1
+  fi
+
+  kubectl cp "$local_file_path" "$pod_name":"$remote_file_path" -n applications || {
+    echo "ERROR: Failed to copy the file to the IG pod: $pod_name"
+    return 1
+  }
+
+  echo "INFO: Successfully copied the file to the IG pod: $pod_name"
 }
