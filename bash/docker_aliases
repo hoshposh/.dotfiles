@@ -79,3 +79,7 @@ function deb_scan() {
   log debug "$log_ctx: debricked_args - ${debricked_args[@]}"
   drit --rm -v "$PWD:/work" -v "$HOME/.m2/settings.xml:/root/.m2/settings.xml" -w /work debricked/cli:2-resolution-debian debricked "${debricked_args[@]}"
 }
+
+function update_deb_image() {
+  dpu debricked/cli:2-resolution-debian debricked
+}
