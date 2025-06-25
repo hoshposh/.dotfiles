@@ -29,18 +29,18 @@ function asdf_upgrade {
     echo -e "\nPlugin repositories updated.\n"
   fi
 
-  local plugin_env_var latest_version plugin_ver_val
+  local plugin_env_var latest_version plugin_ver_prefix
   echo -e "\nUpgrading packages..."
   echo -e "$plugins" | while read -r plugin; do
 
     # check if an env var is set for the plugin with a version prefix value (i.e. temurin-17)
     # replace - with _ to make it a valid env var name
     plugin_env_var="${env_var_prefix}${plugin//-/_}"
-    plugin_ver_val=$(eval echo "\$$plugin_env_var")
+    plugin_ver_prefix=$(eval echo "\$$plugin_env_var")
     # echo "[DEBUG] plugin_env_var for $plugin is $plugin_env_var."
-    # echo "[DEBUG] plugin_ver_val for $plugin is $plugin_ver_val."
-    if [[ ! "${plugin_ver_val}" == "" ]]; then
-      latest_version="$(asdf latest "$plugin" "$plugin_ver_val")"
+    # echo "[DEBUG] plugin_ver_prefix for $plugin is $plugin_ver_prefix."
+    if [[ ! "${plugin_ver_prefix}" == "" ]]; then
+      latest_version="$(asdf latest "$plugin" "$plugin_ver_prefix")"
     else
       latest_version="$(asdf latest "$plugin")"
     fi
@@ -52,9 +52,9 @@ function asdf_upgrade {
     fi
     echo -e "Upgrading $plugin..."
     # Upgrade plugin
-    local install_out
-    install_out="$(asdf install "$plugin" "$latest_version" 2>&1)" || asdf_fail "Failed to upgrade $plugin: \n$install_out"
-    # echo "output from asdf install: [$install_out]"
+    local install_output=""
+    install_output="$(asdf install "$plugin" "$latest_version" 2>&1)" || asdf_fail "Failed to upgrade $plugin: \n$install_output"
+    # echo "output from asdf install: [$install_output]"
     if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
       inst_plugin_location=$(asdf current --no-header "$plugin" | tr -s ' ' | cut -d' ' -f3) 2> /dev/null
       if [[ "$inst_plugin_location" == "$global_location" ]]; then
@@ -71,18 +71,11 @@ function asdf_upgrade {
 
 function did_asdf_upgrade_plugin {
   local -r plugin="$1"
-  local expected_version="$2"
-
-  # replace + with \+ to escape it in the regex
-  expected_version="${expected_version/+/\\+}"
+  local -r expected_version="$2"
 
   local -r _output=$(asdf list "$plugin" "$expected_version" 2>&1)
   # searching for "$expected_version" with an exact match (eol char $ used) in asdf output
-  if string_multiline_contains "${_output}" "${expected_version}$"; then
-    return 0
-  else
-    return 1
-  fi
+  string_multiline_contains "${_output}" "${expected_version}$"
 }
 
 function asdf_fail {
