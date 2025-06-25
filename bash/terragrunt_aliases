@@ -12,6 +12,7 @@ function wfind {
   find . -not -path "*/.terragrunt-cache/*" "$@"
 }
 
+alias tg_op="op run -- terragrunt"
 alias tg='terragrunt'
 alias tgaf="terragrunt apply" # "fast"
 alias tgpf="terragrunt plan"  # "fast"
@@ -61,6 +62,7 @@ alias ut='update-tenant --auto-approve'
 
 # Docker based infra using devops image
 alias tgdevops='drit --rm -v $HOME/.devops-ssh:/root/.ssh -v $HOME/.devops-gitconfig:/root/.gitconfig -v $FOCUSSAAS_INFRA_MODULES:/work/infra-modules -v $FOCUSSAAS_INFRA_LIVE:/work/infra-live -e AWS_PROFILE -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e FOCUSSAAS_INFRA_LIVE="/work/infra-live" -e FOCUSSAAS_INFRA_MODULES="/work/infra-modules" -e GITHUB_OAUTH_TOKEN -e GITHUB_TOKEN="$GITHUB_OAUTH_TOKEN" -e GITLAB_TOKEN -e GIT_USER_NAME=hoshposh -e GIT_USER_EMAIL=lwashington@opentext.com -e USE_GIT_HTTPS=true -e TERRAGRUNT_IAM_ROLE -e TERRAGRUNT_SOURCE_UPDATE=true -w /work/infra-live/dev/us-east-2/igalw-srv-ig idgov-docker.svsartifactory.swinfra.net/idmapps/ig-devops-image:0.2.0-SNAPSHOT /bin/bash'
+# Docker based infra using devops image and TG source referencing the local infra-modules working folder.
 alias tgdevops_dev='drit --rm -v $HOME/.devops-ssh:/root/.ssh -v $HOME/.devops-gitconfig:/root/.gitconfig -v $FOCUSSAAS_INFRA_MODULES:/work/infra-modules -v $FOCUSSAAS_INFRA_LIVE:/work/infra-live -e AWS_PROFILE -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e FOCUSSAAS_INFRA_LIVE="/work/infra-live" -e FOCUSSAAS_INFRA_MODULES="/work/infra-modules" -e GITHUB_OAUTH_TOKEN -e GITHUB_TOKEN="$GITHUB_OAUTH_TOKEN" -e GITLAB_TOKEN -e GIT_USER_NAME=hoshposh -e GIT_USER_EMAIL=lwashington@opentext.com -e USE_GIT_HTTPS=true -e TERRAGRUNT_IAM_ROLE -e TERRAGRUNT_SOURCE_MAP="git::ssh://git@hmf.gitlab.otxlab.net/infrastructure-ops-saas/cybersecurity-saas/infrastructure-modules.git=/work/infra-modules" -e TERRAGRUNT_SOURCE_UPDATE=true -w /work/infra-live/dev/us-east-2/igalw-srv-ig idgov-docker.svsartifactory.swinfra.net/idmapps/ig-devops-image:0.2.0-SNAPSHOT /bin/bash'
 
 function terragrunt_local_module_source {
