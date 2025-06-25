@@ -21,12 +21,12 @@ function env_kubectl_assume_iam_role {
   fi
 
   if ! aws_identity_is_iam_role "$iam_role"; then
-    aws_sts_start_privileged_session "$iam_role"
+    aws_sts_start_privileged_session "$iam_role" 1>&2
   fi
 
   command kubectl "$@"
 
-  aws_sts_end_privileged_session
+  aws_sts_end_privileged_session 1>&2
 }
 
 alias kc_env="env_kubectl_assume_iam_role"
