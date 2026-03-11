@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Summary: Run a Black Duck scan on the current project using configuration from .bduck/props.json
+bduck_scan() {
+    # Define project root as the current working directory and load props from .bduck
+    PROJECT_ROOT=$(pwd)
+    PROPS="$PROJECT_ROOT/.bduck/props.json"
+
+    # Verify .bduck directory and props.json exist
+    if [ ! -d "$PROJECT_ROOT/.bduck" ] || [ ! -f "$PROPS" ]; then
+        echo "Error: $PROJECT_ROOT/.bduck or props.json not found" >&2
+        return 1
+    fi
+
+    # Parse excluded directories
+    EXCLUDED=$(jq -r '.excludedDirectories | join(",")' "$PROPS")
+
+    # Parse Black Duck URL with default
+    URL=$(jq -r '.blackduckUrl // empty' "$PROPS")
+    if [ -z "$URL" ]; then
+        URL="https://blackduck.opentext.net"
+    fi
+
+    # Parse token (literal or via op)
+    TOKEN_REF=$(jq -r '.token // empty' "$PROPS")
+    if [[ "$TOKEN_REF" == op://* ]]; then
+        _TOKEN=$(op read "$TOKEN_REF" --no-newline)
+    else
+        _TOKEN="$TOKEN_REF"
+    fi
+    if [ -z "${_TOKEN}" ]; then
+        echo "Error: token is empty" >&2
+        return 1
+    fi
+
+    # Read project version
+    VERSION=$(grep '^SEPG_OVERRIDE_BLACKDUCK_VERSION' "$PROJECT_ROOT/official-build.props" | cut -d'=' -f2)
+    [ -n "$VERSION" ] || { echo "Missing SEPG_OVERRIDE_BLACKDUCK_VERSION" >&2; return 1; }
+
+    # Read project name
+    NAME=$(grep '^detect.project.name' "$PROJECT_ROOT/.sepg/blackduck.properties" | cut -d'=' -f2- | tr -d '"')
+    [ -n "$NAME" ] || { echo "Missing detect.project.name" >&2; return 1; }
+
+    # Assemble and execute
+    ARGS=( --blackduck.api.token="${_TOKEN}" --blackduck.url="${URL}" --detect.project.name="${NAME}" --detect.project.version.name="${VERSION}" --detect.blackduck.signature.scanner.individual.file.matching=all )
+    [ -n "$EXCLUDED" ] && ARGS+=( --detect.excluded.directories="$EXCLUDED" )
+
+    bash <(curl -s https://detect.blackduck.com/detect10.sh) "${ARGS[@]}"
+}
