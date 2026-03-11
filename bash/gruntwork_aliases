@@ -27,4 +27,4 @@ function env-ghe-gruntwork-install {
 	# Set to the existing token
 	export GITHUB_OAUTH_TOKEN="$current_gh_token"
 }
-alias gruntwork-install="env-ghe-gruntwork-install"
+alias ghe-gruntwork-install="env-ghe-gruntwork-install"
