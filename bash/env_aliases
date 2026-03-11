@@ -21,7 +21,7 @@ function aws_auth() {
   local -r op_nonprod="AWS-SSADev-NonProd"
   local -r op_prod="AWS-SSASecurity-Prod"
   local -r op_idmapps="Work AWS Sign-In"
-  local -r op_vault="Work"
+  local -r op_vault="OT-Work"
 
   case $profile in
       coe_prod)
