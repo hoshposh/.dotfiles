@@ -6,6 +6,7 @@
 
 # Var for asdf_upgrade to filter the latest version
 export ASDF_PLUGIN_java=temurin-21
+export ASDF_PLUGIN_golang=1.24
 
 # ASDF using SSH for git in plugins that support it
 export ASDF_USE_SSH=true
@@ -25,46 +26,75 @@ function asdf_upgrade {
   local inst_plugin_location
   if "$update_plugin_repos"; then
     echo -e "\nUpdating plugin repositories..."
-    asdf plugin update --all || asdf_fail "Failed to upgrade plugin repositories" 
+    local failed_plugins=()
+    while read -r plugin; do
+      local retry_count=0
+      local max_retries=3
+      local success=0
+      while (( retry_count <= max_retries )); do
+        if asdf plugin update "$plugin" 2>&1; then
+          success=1
+          break
+        else
+          (( retry_count++ ))
+          if (( retry_count <= max_retries )); then
+            echo "⚠️  Retry $retry_count/$max_retries for $plugin..."
+            sleep 2
+          else
+            echo "⚠️  Warning: Failed to update plugin repository $plugin after $max_retries retries (continuing...)"
+          fi
+        fi
+      done
+      if (( success == 0 )); then
+        failed_plugins+=("$plugin")
+      fi
+    done < <(echo -e "$plugins")
     echo -e "\nPlugin repositories updated.\n"
+    if (( ${#failed_plugins[@]} > 0 )); then
+      echo "The following plugins failed to update after $max_retries retries:"
+      for p in "${failed_plugins[@]}"; do
+        echo "  - $p"
+      done
+    fi
   fi
 
   local plugin_env_var latest_version plugin_ver_prefix
   echo -e "\nUpgrading packages..."
-  echo -e "$plugins" | while read -r plugin; do
+  while read -r plugin; do
 
-    # check if an env var is set for the plugin with a version prefix value (i.e. temurin-17)
-    # replace - with _ to make it a valid env var name
-    plugin_env_var="${env_var_prefix}${plugin//-/_}"
-    plugin_ver_prefix=$(eval echo "\$$plugin_env_var")
-    # echo "[DEBUG] plugin_env_var for $plugin is $plugin_env_var."
-    # echo "[DEBUG] plugin_ver_prefix for $plugin is $plugin_ver_prefix."
-    if [[ ! "${plugin_ver_prefix}" == "" ]]; then
-      latest_version="$(asdf latest "$plugin" "$plugin_ver_prefix")"
-    else
-      latest_version="$(asdf latest "$plugin")"
-    fi
-    # echo "[DEBUG] Latest version for $plugin is $latest_version."
-    # Check if plugin is already at latest version
-    if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
-      # echo "plugin $plugin is already at latest ($latest_version)"
-      continue
-    fi
-    echo -e "Upgrading $plugin..."
-    # Upgrade plugin
-    local install_output=""
-    install_output="$(asdf install "$plugin" "$latest_version" 2>&1)" || asdf_fail "Failed to upgrade $plugin: \n$install_output"
-    # echo "output from asdf install: [$install_output]"
-    if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
-      inst_plugin_location=$(asdf current --no-header "$plugin" | tr -s ' ' | cut -d' ' -f3) 2> /dev/null
-      if [[ "$inst_plugin_location" == "$global_location" ]]; then
+    # get the location where the plugin is currently installed (global or local)
+    inst_plugin_location=$(asdf current --no-header "$plugin" | tr -s ' ' | cut -d' ' -f3) 2> /dev/null
+    if [[ "$inst_plugin_location" == "$global_location" ]]; then
+      # check if an env var is set for the plugin with a version prefix value (i.e. temurin-17)
+      # replace - with _ to make it a valid env var name
+      plugin_env_var="${env_var_prefix}${plugin//-/_}"
+      plugin_ver_prefix=$(eval echo "\$$plugin_env_var")
+      # echo "[DEBUG] plugin_env_var for $plugin is $plugin_env_var."
+      # echo "[DEBUG] plugin_ver_prefix for $plugin is $plugin_ver_prefix."
+      if [[ ! "${plugin_ver_prefix}" == "" ]]; then
+        latest_version="$(asdf latest "$plugin" "$plugin_ver_prefix")"
+      else
+        latest_version="$(asdf latest "$plugin")"
+      fi
+      # echo "[DEBUG] Latest version for $plugin is $latest_version."
+      # Check if plugin is already at latest version
+      if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
+        # echo "plugin $plugin is already at latest ($latest_version)"
+        continue
+      fi
+      echo -e "Upgrading $plugin..."
+      # Upgrade plugin
+      local install_output=""
+      install_output="$(asdf install "$plugin" "$latest_version" 2>&1)" || asdf_fail "Failed to upgrade $plugin: \n$install_output"
+      # echo "output from asdf install: [$install_output]"
+      if did_asdf_upgrade_plugin "$plugin" "$latest_version"; then
         echo -e "Setting plugin ($plugin) at GLOBAL scope to latest ($latest_version)..."
         asdf set -u "$plugin" "$latest_version" || asdf_fail "Failed to set GLOBAL plugin ($plugin) to $latest_version"
-      else
-        echo "Skipping GLOBAL plugin ($plugin) upgrade, it is not currently installed globally."
       fi
+    else
+      echo "Skipping plugin ($plugin) upgrade, it is not currently installed globally."
     fi
-  done
+  done < <(echo -e "$plugins")
 
   echo -e "\nDone.\n"
 }
