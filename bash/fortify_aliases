@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+# Summary: Run a Fortify scan on the current project using configuration from .fortify/props.json
+fortify_scan() {
+    # Define project root as the current working directory and load props from .bduck
+    PROJECT_ROOT=$(pwd)
+    PROPS="$PROJECT_ROOT/.fortify/props.json"
+
+    # Verify .fortify directory and props.json exist
+    if [ ! -d "$PROJECT_ROOT/.fortify" ] || [ ! -f "$PROPS" ]; then
+        echo "Error: $PROJECT_ROOT/.fortify or props.json not found" >&2
+        return 1
+    fi
+
+    # Parse Black Duck URL with default
+    URL=$(jq -r '.sscUrl // empty' "$PROPS")
+    if [ -z "$URL" ]; then
+        URL="https://fortifyhub.otxlab.net/ssc"
+    fi
+
+    # Parse token (literal or via op)
+    CLIENT_AUTH_TOKEN_REF="op://OT-Work/Fortify OT Client Auth/password"
+    if [[ "$CLIENT_AUTH_TOKEN_REF" == op://* ]]; then
+        _CLIENT_AUTH_TOKEN=$(op read "$CLIENT_AUTH_TOKEN_REF" --no-newline)
+    else
+        _CLIENT_AUTH_TOKEN="$CLIENT_AUTH_TOKEN_REF"
+    fi
+    if [ -z "${_CLIENT_AUTH_TOKEN}" ]; then
+        echo "Error: token is empty" >&2
+        return 1
+    fi
+
+    CI_TOKEN_REF="op://OT-Work/Fortify CIToken lw-mbp/ssc rest api"
+    if [[ "$CI_TOKEN_REF" == op://* ]]; then
+        _CI_TOKEN=$(op read "$CI_TOKEN_REF" --no-newline)
+    else
+        _CI_TOKEN="$CI_TOKEN_REF"
+    fi
+    if [ -z "${_CI_TOKEN}" ]; then
+        echo "Error: token is empty" >&2
+        return 1
+    fi
+
+    # determine the USER_HOME in the image
+    USER_HOME=$(docker run --rm artifactory.otxlab.net/comc-productsecurity-docker-rel-local/fortify_sca/custom_images/fortify_26.1_jdk25_npm:latest sh -c 'echo $HOME')
+
+    _FORTIFY_CMD=$(cat <<'EOF'
+set -euo pipefail
+
+export SSC_APP_NAME=$(grep -A 2 '"application"' .fortify/props.json | grep '"name"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+export SSC_APP_VERSION=$(grep -A 2 '"application"' .fortify/props.json | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+if [ -z "$SSC_APP_NAME" ] || [ -z "$SSC_APP_VERSION" ]; then
+    echo "Error: SSC app name or version not found in .fortify/props.json" >&2
+    exit 1
+fi
+export SSC_APPLICATION_VERSION="${SSC_APP_NAME}:${SSC_APP_VERSION}"
+echo "SSC application version: $SSC_APPLICATION_VERSION"
+
+EXCLUDE_LIST=$(grep -A 100 '"exclusions"' .fortify/props.json | \
+    sed -n 's/[[:space:]]*"\([^"]*\)",*/\1/p' | \
+    grep -v 'exclusions' || true)
+
+EXCLUDE_ARGS=""
+if [ -z "$EXCLUDE_LIST" ]; then
+    EXCLUDE_ARGS='-exclude "target/**/*" -exclude "**/*.class" -exclude "**/.flattened-pom.xml" -exclude ".sepg/**/*" -exclude ".vscode/**/*" -exclude ".bduck/**/*" -exclude ".debricked/**/*" -exclude ".fortify/**/*" -exclude ".settings/**/*" -exclude "**/l10n-pom.xml" -exclude "**/dependency-reduced-pom.xml" -exclude "**/debricked.fingerprints.txt" -exclude "**/maven.debricked.lock" -exclude "**/Jenkinsfile*"'
+else
+    while IFS= read -r pattern; do
+        EXCLUDE_ARGS="$EXCLUDE_ARGS -exclude \"$pattern\""
+    done <<< "$EXCLUDE_LIST"
+fi
+
+echo "SSC login with URL: $FCLI_DEFAULT_SSC_URL"
+fcli ssc session login --url "$FCLI_DEFAULT_SSC_URL" --token "$FCLI_DEFAULT_SSC_CI_TOKEN" --client-auth-token="$FCLI_DEFAULT_CLIENT_AUTH_TOKEN" -k
+
+echo "Packaging source code with to .fortify/package.zip with exclusions: $EXCLUDE_ARGS"
+eval "scancentral package -o .fortify/package.zip $EXCLUDE_ARGS"
+
+if [ ! -f .fortify/package.zip ]; then
+    echo "Error: .fortify/package.zip was not created" >&2
+    exit 1
+fi
+
+echo "Starting Fortify scan and publish to SSC application version: $SSC_APPLICATION_VERSION"
+fcli sc-sast scan start -f .fortify/package.zip --publish-to "$SSC_APPLICATION_VERSION" --store x
+
+fcli ssc session logout
+EOF
+)
+
+    drit --rm -v "$PWD"/:/work -w /work -v "${HOME}/.m2/repository":"${USER_HOME}/.m2/repository" -v "$HOME/.m2/settings.xml":"${USER_HOME}/.m2/settings.xml" -e FCLI_DEFAULT_CLIENT_AUTH_TOKEN="$_CLIENT_AUTH_TOKEN" -e FCLI_DEFAULT_SSC_CI_TOKEN="$_CI_TOKEN" -e FCLI_DEFAULT_SSC_URL="$URL" artifactory.otxlab.net/comc-productsecurity-docker-rel-local/fortify_sca/custom_images/fortify_26.1_jdk25_npm:latest /bin/bash -lc "$_FORTIFY_CMD"
+}
