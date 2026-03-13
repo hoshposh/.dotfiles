@@ -10,3 +10,16 @@ update_known_hosts ()
 {
     ssh-keygen -R $1 && ssh-keyscan -H $1 >> ~/.ssh/known_hosts
 }
+
+# Wrapper for the personal helper script so it is available in new shells.
+find_github_ssh_key ()
+{
+    local script_path="$HOME/.dotfiles/bash/find_github_ssh_key.sh"
+
+    if [[ ! -x "$script_path" ]]; then
+        echo "Missing or non-executable script: $script_path"
+        return 1
+    fi
+
+    "$script_path" "$@"
+}
