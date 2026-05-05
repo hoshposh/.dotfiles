@@ -26,3 +26,16 @@ done
 
 # No bitwarden so commenting out
 # source "$DOTFILES_DIR/util/auth_env.sh"
+
+function source_zsh_configs {
+	local -r zsh_dir="$1"
+
+	for zsh_file in "$zsh_dir"/*.zsh; do
+		# We skip plugins.zsh because it must be loaded BEFORE oh-my-zsh
+		if [[ -f "$zsh_file" && "$(basename "$zsh_file")" != "plugins.zsh" ]]; then
+			source "$zsh_file"
+		fi
+	done
+}
+
+source_zsh_configs "$DOTFILES_DIR/zsh"

@@ -26,11 +26,22 @@ My aliases repo.
     cd ~ && git clone https://github.com/tdharris/.dotfiles.git .dotfiles
     ```
 
-2. Enable aliases in the shell by adding the following to the `~/.zshrc` or `~/profile` file:
+2. Enable aliases and zsh configs in the shell by modifying your `~/.zshrc` file:
 
-    ```console
-    if [[ -f "~/.dotfiles/bootstrap.sh" ]]; then
-        source ~/.dotfiles/bootstrap.sh
+    First, ensure that the plugins file is sourced **before** Oh My Zsh is loaded:
+
+    ```bash
+    # Which plugins would you like to load?
+    source "$HOME/.dotfiles/zsh/plugins.zsh"
+    
+    source $ZSH/oh-my-zsh.sh
+    ```
+
+    Then, add the bootstrap script at the **end** of your `~/.zshrc` file to load aliases, keybindings, and history options:
+
+    ```bash
+    if [[ -f "$HOME/.dotfiles/bootstrap.sh" ]]; then
+        source "$HOME/.dotfiles/bootstrap.sh"
     fi
     ```
 
